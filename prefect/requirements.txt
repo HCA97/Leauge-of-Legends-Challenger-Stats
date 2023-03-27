@@ -1,0 +1,6 @@
+pandas
+jupyter
+requests
+cassiopeia
+riotwatcher
+tqdm
