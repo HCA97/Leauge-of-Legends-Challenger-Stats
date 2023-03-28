@@ -19,7 +19,8 @@ Setup the compute engine.
 ```bash
 wget https://repo.anaconda.com/archive/Anaconda3-2023.03-Linux-x86_64.sh
 chmod +x Anaconda3-2023.03-Linux-x86_64.sh
-./Anaconda3-2023.03-Linux-x86_64.sh
+./Anaconda3-2023.03-Linux-x86_64.sh # set conda init [yes]
+source .bashrc
 conda create --name prefect python=3.8
 conda activate prefect
 pip install \
@@ -48,12 +49,25 @@ Create a prefect cloud account
 
 Setup workspace.
 
-Setup blocks we need.
-
 ```bash
 git clone https://github.com/HCA97/de-zoomcamp-project.git
 cd de-zoomcamp-project/prefect
 pip install -r requiremetns.txt
-prefect deployment build main_track_player.py:process -n project -q project -sb gcs/project -a
+```
+
+Login prefect
+```bash
+prefect cloud login
+```
+
+Create Blocks
+```bash
+cd prefect
+python blocks.py --sa_path="$SA_PATH" --riot_api_key="$RIOT_API_KEY"
+```
+
+Setup blocks we need.
+```bash
+prefect deployment build main_high_elo.py:process -n project -q project -sb gcs/de-project-deployment -a
 ```
 ## DBT

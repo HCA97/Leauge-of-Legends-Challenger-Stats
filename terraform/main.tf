@@ -21,7 +21,7 @@ provider "google" {
 resource "google_project_service" "project" {
     for_each = toset([
         "compute.googleapis.com",
-        "iam.serviceAccounts.create"
+        "iamcredentials.googleapis.com"
     ])
     project = var.project
     service = each.key
@@ -30,12 +30,11 @@ resource "google_project_service" "project" {
 resource "google_project_iam_member" "permissions" {
     for_each = toset([
         "roles/bigquery.admin",
-        "roles/storage.admin",
-        "roles/storage.objectAdmin"
+        "roles/storage.admin"
     ])
     project = var.project
     role    = each.key
-    member  = google_service_account.compute_engine_sa.email
+    member  = "serviceAccount:${google_service_account.compute_engine_sa.email}"
 }
 
 resource "google_service_account" "compute_engine_sa" {
@@ -51,6 +50,7 @@ resource "google_service_account" "compute_engine_sa" {
 resource "google_compute_instance" "prefect" {
     name         = "prefect"
     machine_type = "e2-medium"
+    zone = "${var.region}-b"
     deletion_protection = false
 
     boot_disk {
@@ -61,6 +61,9 @@ resource "google_compute_instance" "prefect" {
 
     network_interface {
         network = "default"
+        access_config {
+          // Ephemeral public IP
+        }
     } 
 
     service_account {

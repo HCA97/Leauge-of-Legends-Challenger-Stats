@@ -1,5 +1,10 @@
 import os
 
+from google.cloud import bigquery
+
+PROJECT_ID = os.getenv('PROJECT_ID')
+TABLE_ID = os.getenv('TABLE_ID', "datawarehous")
+
 RIOT_API_KEY = os.getenv('ROIT_API_KEY')
 REGION = os.getenv("REGION", 'euw1')
 
