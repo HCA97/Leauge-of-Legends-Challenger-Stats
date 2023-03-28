@@ -1,27 +1,16 @@
-import time
-import itertools
-from concurrent.futures import ThreadPoolExecutor
 import json
-import logging
-import os
 import datetime as dt
-
+import os
 import pandas as pd
-from tqdm import tqdm
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
+from prefect_gcp.cloud_storage import GcsBucket
+from prefect import task, flow
+from prefect.tasks import task_input_hash
+
 import config as cfg
 
-
-logging.basicConfig(
-    format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S',
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler("challenger_players.log"),
-        logging.StreamHandler()
-    ])
 
 SESSION = requests.Session()
 retries = Retry(total=5,
@@ -31,23 +20,21 @@ SESSION.mount('https://',
             HTTPAdapter(max_retries=retries))
 
 
-def get_all_ids_by_summoner_name(summoner_name):
+@task(log_prints=True)
+def get_summoner_ids(summoner_name: str) -> str:
     with SESSION.get(f'{cfg.REQUEST_URLS["SUMMONER-V4"]}/lol/summoner/v4/summoners/by-name/{summoner_name}',
                       headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
         if req.status_code == 200:
-            return req.json()
+            data = req.json()
+            return {
+                'puuid': data['puuid'],
+                'id': data['id'],
+                'name': summoner_name
+            }
     return {}
 
-def get_puuid(summoner_name: str) -> str:
-    data = get_all_ids_by_summoner_name(summoner_name)
-    if data:
-        return {
-            'puuid': data['puuid'],
-            'id': data['id']
-        }
-    return {}
-
-def get_player_rank(summoner_id: str, queue: str):
+@task(log_prints=True)
+def get_player_rank(summoner_id: str, queue: str) -> dict:
     with SESSION.get(f'{cfg.REQUEST_URLS["LEAUGE-V4"]}/lol/league/v4/entries/by-summoner/{summoner_id}',
                     headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
         if req.status_code == 200:
@@ -63,10 +50,12 @@ def get_player_rank(summoner_id: str, queue: str):
                     }
         return {}
 
+@task(log_prints=True)
 def save_data(data: pd.DataFrame, path: str, dtypes: dict) -> None:
     data.astype(dtype=dtypes)
     data.to_parquet(path, compression='gzip')
 
+@task(log_prints=True)
 def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100, match_type: str = 'ranked') -> list:
     match_ids = []
     start = 0
@@ -92,16 +81,17 @@ def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100
             start += count
             
 
-    logging.info(f'In total {len(match_ids)} played this season.')
+    print(f'In total {len(match_ids)} played this season.')
     return match_ids
 
+@task(log_prints=True, cache_key_fn=task_input_hash, cache_expiration=dt.timedelta(days=1))
 def get_match_info(match_id) -> list:
     with SESSION.get(f'{cfg.REQUEST_URLS["MATCH-V5"]}/lol/match/v5/matches/{match_id}',
                     headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
         if req.status_code == 200:
             data = req.json()
         else:
-            logging.info(f'Failed to do request ({req.status_code})')
+            print(f'Failed to do request ({req.status_code})')
             return []
         
 
@@ -181,26 +171,33 @@ def get_match_info(match_id) -> list:
 
     return participants
 
-def process_player(summoner_name: str, start_time: dt.datetime):
-
-    
-    ids = get_puuid(summoner_name)
-    player_rank = get_player_rank(ids['id'], 'RANKED_SOLO_5x5')
-    match_ids = match_history(ids['puuid'], start_time)
-    
+@flow(name='Process-Matches', log_prints=True)
+def process_matches(summoner_ids: dict, start_time: dt.datetime):
+    match_ids = match_history(summoner_ids['puuid'], start_time)
     participants = []
-    for match_id in tqdm(match_ids):
+    for match_id in match_ids[:10]:
         participants.extend(get_match_info(match_id))
     participants = pd.DataFrame(participants)
-    
-    save_data(participants, f'players_{summoner_name}_{start_time.strftime("%m-%d-%Y")}.parquet', cfg.DTYPE_MATCH)
-    with open(f'player_rank_{summoner_name}.json', 'w') as f:
+    save_data(participants, 
+              f'players_{summoner_ids["name"]}_{start_time.strftime("%m-%d-%Y")}.parquet', 
+              cfg.DTYPE_MATCH
+    )
+
+@flow(name='Process-Player', log_prints=True)
+def process_player(summoner_ids: dict):   
+    player_rank = get_player_rank(summoner_ids['id'], 'RANKED_SOLO_5x5')  
+    with open(f'player_rank_{summoner_ids["name"]}.json', 'w') as f:
         json.dump(player_rank, f, indent=4)
 
-    # return participants, player_rank
+@flow(name='Process', log_prints=True)
+def process(summoner_name: str, start_time: dt.datetime):
+    ids = get_summoner_ids(summoner_name)
+    if ids:
+        process_player(ids)
+        process_matches(ids, start_time)
 
 if __name__ == '__main__':
     summoner_name = 'FREEDOMFIGHTER28'
     start_time = dt.datetime(2023, 1, 11) # when the new season started
 
-    process_player(summoner_name, start_time)
+    process(summoner_name, start_time)

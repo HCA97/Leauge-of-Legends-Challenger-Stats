@@ -1,8 +1,4 @@
 import os
-import logging
-
-import requests
-from requests.adapters import HTTPAdapter, Retry
 
 RIOT_API_KEY = os.getenv('ROIT_API_KEY')
 REGION = os.getenv("REGION", 'euw1')
@@ -13,26 +9,6 @@ if REGION == 'euw1':
         'SUMMONER-V4': 'https://euw1.api.riotgames.com',
         'MATCH-V5': 'https://europe.api.riotgames.com'
     }
-
-
-
-logging.basicConfig(
-    format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S',
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler("challenger_players.log"),
-        logging.StreamHandler()
-    ])
-
-SESSION = requests.Session()
-retries = Retry(total=5,
-                backoff_factor=0.5,
-                status_forcelist=[ 429 ])
-SESSION.mount('https://', 
-            HTTPAdapter(max_retries=retries))
-
-
 
 DTYPE_PLAYER = {
     "winRate": float,
