@@ -34,7 +34,6 @@ pip install \
     pandas-gbq==0.18.1 \
     google-cloud-storage \
     gcsfs
-export RIOT_API_KEY="$RIOT_API_KEY"
 export PREFECT_API_KEY="$PREFECT_API_KEY"
 export PREFECT_API_URL="https://api.prefect.cloud/api/accounts/$ACCOUNT_ID/workspaces/$WORKSPACE_ID"
 export PREFECT_PROFILE="default"
@@ -68,6 +67,6 @@ python blocks.py --sa_path="$SA_PATH" --riot_api_key="$RIOT_API_KEY"
 
 Setup blocks we need.
 ```bash
-prefect deployment build main_high_elo.py:process -n project -q project -sb gcs/de-project-deployment -a
+python deployment.py
 ```
 ## DBT
