@@ -47,6 +47,7 @@ resource "google_service_account" "compute_engine_sa" {
     ]
 }
 
+
 resource "google_compute_instance" "prefect" {
     name         = "prefect"
     machine_type = "e2-medium"
@@ -56,6 +57,7 @@ resource "google_compute_instance" "prefect" {
     boot_disk {
       initialize_params {
         image = "ubuntu-os-cloud/ubuntu-1804-lts"
+        size = 30
       }
     }
 
@@ -109,8 +111,8 @@ resource "google_storage_bucket" "prefect-bucket" {
   force_destroy = true
 }
 
-resource "google_bigquery_dataset" "datawarehous" {
-  dataset_id = "datawarehous"
+resource "google_bigquery_dataset" "datawarehouse" {
+  dataset_id = "datawarehouse"
   project    = var.project
   location   = var.region
 }
