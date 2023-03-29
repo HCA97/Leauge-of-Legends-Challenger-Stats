@@ -2,7 +2,6 @@ import json
 import argparse
 
 from prefect_gcp import GcpCredentials
-from prefect_gcp.cloud_storage import GcsBucket
 from prefect.filesystems import GCS
 from prefect.blocks.system import Secret
 
@@ -20,14 +19,6 @@ credentials_block = GcpCredentials(
     service_account_info=sa
 )
 credentials_block.save("de-project-sa", overwrite=True)
-
-
-# DATA WHAREHOUSE BLOCK
-bucket_block = GcsBucket(
-    gcp_credentials=GcpCredentials.load("de-project-sa"),
-    bucket="de-project-data-lake-1234",
-)
-bucket_block.save("de-project-dw", overwrite=True)
 
 # DEPLOYMENT BLOCK
 bucket_storage = GCS(

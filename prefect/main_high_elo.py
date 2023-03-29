@@ -1,125 +1,84 @@
 import datetime as dt
 from typing import Optional
-import os
 
 import pandas as pd
-import requests
-from requests.adapters import HTTPAdapter, Retry
 
 from prefect import flow, task
-from prefect_gcp.cloud_storage import GcsBucket
-from prefect_gcp import GcpCredentials
+from prefect.blocks.system import Secret
+
 from prefect.tasks import task_input_hash
 from google.cloud import bigquery
 
 import config as cfg
-
-#
-#
-#
-
-SESSION = requests.Session()
-retries = Retry(total=5,
-                backoff_factor=0.5,
-                status_forcelist=[ 429 ])
-SESSION.mount('https://', 
-            HTTPAdapter(max_retries=retries))
+import utils
 
 
-#
-#
-#
-
-def _get_all_ids_by_summoner_id(summoner_id):
-    with SESSION.get(f'{cfg.REQUEST_URLS["SUMMONER-V4"]}/lol/summoner/v4/summoners/{summoner_id}',
-                      headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
-        if req.status_code == 200:
-            return req.json()
-    return {}
-
-def _get_all_ids_by_summoner_name(summoner_name):
-    with SESSION.get(f'{cfg.REQUEST_URLS["SUMMONER-V4"]}/lol/summoner/v4/summoners/by-name/{summoner_name}',
-                      headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
-        if req.status_code == 200:
-            return req.json()
-    return {}
-
-#
-#
+# 
+# REFECT TASKS
 #
 
-@task()
+@task(name='High-Elo-Players', 
+      cache_key_fn=task_input_hash, 
+      cache_expiration=dt.timedelta(hours=1))
 def high_elo_players(leauge: str, queue: str) -> list:
     data = []
-    with SESSION.get(f'{cfg.REQUEST_URLS["LEAUGE-V4"]}/lol/league/v4/{leauge}/by-queue/{queue}',
-                      headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
+    with cfg.SESSION.get(f'{cfg.REQUEST_URLS["LEAUGE-V4"]}/lol/league/v4/{leauge}/by-queue/{queue}',
+                      headers= {"X-Riot-Token": Secret.load("riot-api-key").get()}) as req:
         if req.status_code == 200:
             data = req.json()['entries']
 
     print(f'In total {leauge}-{queue} players exists {len(data)}.')
     return data
 
-@task()
-def get_puuid(summoner_name, summoner_id: str) -> str:
-    data = _get_all_ids_by_summoner_name(summoner_name)
-    if data:
-        return data['puuid']
 
-    # if we ask wrong summoner ids multiple times we get IP ban
-    print(f'Summoner Name ({summoner_name}) not exists using Summoner ID ({summoner_id}).')
-    data = _get_all_ids_by_summoner_id(summoner_id)
-    if data:
-        return data['puuid']
-    
-    return ''
 
-@task()
+@task(name='Add-PUUID', log_prints=True)
 def add_puuid(players: list) -> pd.DataFrame:
 
     new_players = []
 
     for i, player in enumerate(players):
         if i % 10 == 0:
-            print(f'[ADD PUIID] {i}/{len(players)} are done.')
+            print(f'[ADD PUUID] {i}/{len(players)} are done.')
 
         summoner_name, summoner_id = player['summonerName'], player['summonerId']
-        puuid = get_puuid(summoner_name, summoner_id)
+        ids = utils.get_summoner_ids(summoner_name, summoner_id)
 
-        if puuid:
-            player['summonerPuuid'] = puuid
+        if ids:
+            player['summonerPuuid'] = ids['puuid']
+            player['summonerLevel'] = ids['summonerLevel']
             new_players.append(player)
     
-    print(f'[ADD PUIID] In total {len(new_players)}/{len(players)} puiids obtained.')
+    print(f'[ADD PUUID] In total {len(new_players)}/{len(players)} puiids obtained.')
 
     return pd.DataFrame(new_players)
 
-@task()
+@task(name='Player-Transform')
 def player_transform(players: pd.DataFrame, leauge: str, queue: str) -> pd.DataFrame:
     players = players.drop(columns=['rank', 'veteran', 'inactive', 'freshBlood', 'hotStreak'])
     players['winRate'] = players['wins'] / (players['wins'] + players['losses'])
     players['totalGames'] = players['wins'] + players['losses']
     players['leauge'] = leauge
     players['queue'] = queue
+    players['retriveTime'] = dt.datetime.utcnow()
     return players
 
-@task()
-def save_data(data: pd.DataFrame, path: str, dtypes: dict) -> None:
-    data.astype(dtype=dtypes)
-    data.to_parquet(path, compression='gzip')
 
+@task(name='Upload-To-BQ', log_prints=True)
 def upload_to_bq(data: pd.DataFrame, 
                  table_name: str, 
-                 schema: list,
-                 partitioning: str = 'DAY', 
-                 clustering_fields: list = []) -> None:
-    gcp_credentials_block = GcpCredentials.load("de-zoomcamp-sa")
-    credentials = gcp_credentials_block.get_credentials_from_service_account()
+                 partitioning_field: str,
+                 partitioning_type: str = 'DAY',
+                 clustering_fields: Optional[list] = None) -> None:
+
     
-    client = bigquery.Client(project=cfg.PROJECT_ID, credentials=credentials)
+    client = bigquery.Client(project=cfg.CREDENTIALS.project_id, credentials=cfg.CREDENTIALS)
     job_config = bigquery.LoadJobConfig(
         write_disposition="WRITE_APPEND",
-        schema=schema,
-        time_partitioning=bigquery.table.TimePartitioning(type_=partitioning),
+        time_partitioning=bigquery.table.TimePartitioning(
+            type_=partitioning_type,
+            field=partitioning_field
+        ),
         clustering_fields=clustering_fields
     )
 
@@ -129,38 +88,8 @@ def upload_to_bq(data: pd.DataFrame,
 
 
 
-@task()
-def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100, match_type: str = 'ranked') -> list:
-    match_ids = []
-    start = 0
 
-    while True:
-        with SESSION.get(f'{cfg.REQUEST_URLS["MATCH-V5"]}/lol/match/v5/matches/by-puuid/{summoner_puuid}/ids',
-                        params={
-                            'startTime': int(start_time.timestamp()),
-                            'type': match_type,
-                            'count': count,
-                            'start': start
-                        },
-                        headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
-            
-            data = []
-            if req.status_code == 200:
-                data = req.json()
-
-            if not data:
-                break
-
-            match_ids.extend(data)
-            start += count
-
-            if len(data) < count:
-                break            
-
-    print(f'In total {len(match_ids)} played this season.')
-    return match_ids
-
-@task()
+@task(name="Match-History", log_prints=True)
 def players_match_history(players, start_time):
 
     match_histories = []
@@ -168,139 +97,90 @@ def players_match_history(players, start_time):
 
         if i % 10 == 0:
             print(f'{i}/{len(players)} are done.')
-        matches = match_history(summoner_puuid, start_time)
+        matches = utils.match_history(summoner_puuid, start_time)
         match_histories.extend(matches)
 
     return list(set(match_histories))
 
-@task(log_prints=True, cache_key_fn=task_input_hash, cache_expiration=dt.timedelta(days=1))
-def get_match_info(match_id) -> list:
-    with SESSION.get(f'{cfg.REQUEST_URLS["MATCH-V5"]}/lol/match/v5/matches/{match_id}',
-                    headers= {"X-Riot-Token": cfg.RIOT_API_KEY}) as req:
-        if req.status_code == 200:
-            data = req.json()
-        else:
-            print(f'Failed to do request ({req.status_code})')
-            return []
-        
-
-    # creation time
-    creation_time = dt.datetime.fromtimestamp(data['info']['gameCreation'] / 1000.0)
-    game_start_time = dt.datetime.fromtimestamp(data['info']['gameStartTimestamp'] / 1000.0)
-    # game length
-    duration_min = data['info']['gameDuration'] / 60
+@task(name='Match-Infos', log_prints=True)
+def match_infos(match_ids):
 
     participants = []
-
-    for info in data['info']['participants']:
-        summoner_puuid = info['puuid']
-        summoner_id = info['summonerId']
-        summoner_name = info['summonerName']
-
-        # champion played
-        champion = info['championName']
-
-        # K.D.A
-        kills = info['kills']
-        deaths = info['deaths']
-        assits = info['assists']
-        kda = info['challenges']['kda']
-
-        # Role (MID/ADC/TOP/JG/SUP)
-        lane = info['teamPosition']
-
-        # Damage to Champions
-        damage_dealt = info['totalDamageDealtToChampions']
-        damage_per_min = info['challenges']['damagePerMinute']
-        damage_taken = info['totalDamageTaken']
-
-        # Gold Earn
-        gold = info['goldEarned']
-        gold_per_min = info['challenges']['goldPerMinute']
-
-        # Outcome
-        win = info['win']
-
-        # Creep Slain
-        cs = info['totalMinionsKilled'] + info['neutralMinionsKilled']
-
-        # vision score
-        vision_score = info['visionScore']
-        vision_score_per_min = info['challenges']['visionScorePerMinute']
-
-
-        # game info
-        surrender = info['gameEndedInSurrender']
-
-        participants.append({
-            'summoner_puuid': summoner_puuid,
-            'summoner_id': summoner_id,
-            'summoner_name': summoner_name,
-            'match_id': match_id,
-            'creation_time': creation_time,
-            'game_start_time': game_start_time,
-            'duration_min': duration_min,
-            'champion': champion,
-            'kills': kills,
-            'deaths': deaths,
-            'assits': assits,
-            'kda': kda,
-            'lane': lane,
-            'damage_dealt': damage_dealt,
-            'damage_per_min': damage_per_min,
-            'damage_taken': damage_taken,
-            'gold': gold,
-            'gold_per_min': gold_per_min,
-            'win': win,
-            'cs': cs,
-            'vision_score': vision_score,
-            'vision_score_per_min': vision_score_per_min,
-            'surrender': surrender
-        })
-
-
-@flow(name="Process-Players", log_prints=True)
-def process_players(leauge, queue):
-    players = high_elo_players(leauge, queue)
-    players = add_puuid(players)
-    players = player_transform(players, leauge, queue)
-    save_data(players, f'players_{leauge}_{queue}.parquet', cfg.DTYPE_PLAYER)
-    return players
-
-@flow()
-def process_matches(puuids, start_time):
-    # matches
-    match_ids = players_match_history(puuids, start_time)
-
-    print(f'Total Challenger games {len(match_ids)}.')
-    participants = []
+    
     for i, match_id in enumerate(match_ids):
         if i % 10 == 0:
             print(f'[PROCESS MATCHES] {i}/{len(match_ids)} are done.')
-        participants.extend(get_match_info(match_id))
+        data = utils.get_match_info(match_id)
+        participants.extend(utils.match_transform(data))
+
     participants = pd.DataFrame(participants)
+    participants.astype(cfg.DTYPE_MATCH)
+    return participants
 
-    save_data(participants, f'games_{leauge}_{queue}.parquet', cfg.DTYPE_MATCH)
 
-@flow('Process-Data', log_prints=True)
+#
+# PREFECT FLOWS
+#
+
+@flow(name="Process-Players", log_prints=True)
+def process_players(leauge: str, queue: str) -> list:
+    '''collects high elo players and returns their puuids.'''
+
+    # get high elo players
+    players = high_elo_players(leauge, queue)
+
+    # get their puuid
+    players = add_puuid(players)
+
+    # transform the columns
+    players = player_transform(players, leauge, queue)
+    players.astype(dtype=cfg.DTYPE_PLAYER)
+
+    # upload to bq
+    upload_to_bq(players, 
+                 'players', 
+                 partitioning_field='retriveTime')
+    
+    # return puuids for getting match history
+    return players['summonerPuuid'].tolist()
+
+@flow(name='Process-Matches', log_prints=True)
+def process_matches(puuids: list, start_time: dt.datetime) -> None:
+    '''gets match history of given players and start time.'''
+    
+    # get match ids
+    match_ids = players_match_history(puuids, start_time)
+    print(f'Total games are {len(match_ids)}.')
+
+    # get match infos
+    participants = match_infos(match_ids)
+
+    # upload to bq
+    upload_to_bq(participants, 
+                'matches', 
+                partitioning_field='game_start_time',
+                partitioning_type="HOUR",
+                clustering_fields=[
+                    "lane", "champion" # we will do analysis on lane and champions
+                ])
+
+@flow(name='Process-Data', log_prints=True)
 def process_data(leauge: str, queue: str, start_time: Optional[dt.datetime]) -> None:
-    '''get the challenger players and teir games.'''
+    '''get the high elo players and their games.'''
 
     # get high elo players players
-    players = process_players(leauge, queue)
-    puuids = list(players['summonerPuuid'])
+    puuids = process_players(leauge, queue)
 
     # get their matches matches
-    if start_time is None:
-        start_time = dt.datetime.today() - dt.timedelta(1)
+    if start_time is None: 
+        # get yesterdays data if start_time is none
+        start_time = dt.datetime.utcnow() - dt.timedelta(1)
     process_matches(puuids, start_time)
-
-
-
 
 
 if __name__ == '__main__':
     leauge = 'challengerleagues'
     queue = 'RANKED_SOLO_5x5'
+    start_time = dt.datetime(2023, 3, 28)
 
-    process_data(leauge, queue)
+    process_data(leauge, queue, start_time)

@@ -186,15 +186,17 @@ def process_matches(summoner_ids: dict, start_time: dt.datetime):
 @flow(name='Process-Player', log_prints=True)
 def process_player(summoner_ids: dict):   
     player_rank = get_player_rank(summoner_ids['id'], 'RANKED_SOLO_5x5')  
+    player_rank.extend()
     with open(f'player_rank_{summoner_ids["name"]}.json', 'w') as f:
         json.dump(player_rank, f, indent=4)
 
 @flow(name='Process', log_prints=True)
 def process(summoner_name: str, start_time: dt.datetime):
-    ids = get_summoner_ids(summoner_name)
-    if ids:
-        process_player(ids)
-        process_matches(ids, start_time)
+    summoner_ids = get_summoner_ids(summoner_name)
+    if summoner_ids:
+        player_rank = get_player_rank(summoner_ids['id'], 'RANKED_SOL_5x5')
+        match_ids = match_history(summoner_ids['puuid'], start_time)
+
 
 if __name__ == '__main__':
     summoner_name = 'FREEDOMFIGHTER28'

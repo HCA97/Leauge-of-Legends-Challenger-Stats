@@ -1,19 +1,27 @@
 import os
 
-from google.cloud import bigquery
+import requests
+from requests.adapters import HTTPAdapter, Retry
+from prefect_gcp import GcpCredentials
 
-PROJECT_ID = os.getenv('PROJECT_ID')
-TABLE_ID = os.getenv('TABLE_ID', "datawarehous")
+SESSION = requests.Session()
+retries = Retry(total=5,
+                backoff_factor=0.5,
+                status_forcelist=[ 429 ])
+SESSION.mount('https://', 
+            HTTPAdapter(max_retries=retries))
 
-RIOT_API_KEY = os.getenv('ROIT_API_KEY')
-REGION = os.getenv("REGION", 'euw1')
+TABLE_ID = os.getenv('TABLE_ID', "datawarehouse")
+DATA_LAKE = os.getenv('DATA_LAKE', "de-zoomcamp-project-data-lake-1234")
 
-if REGION == 'euw1':
-    REQUEST_URLS = {
-        "LEAUGE-V4" : 'https://euw1.api.riotgames.com',
-        'SUMMONER-V4': 'https://euw1.api.riotgames.com',
-        'MATCH-V5': 'https://europe.api.riotgames.com'
-    }
+CREDENTIALS = GcpCredentials.load("de-project-sa").get_credentials_from_service_account()
+
+
+REQUEST_URLS = {
+    "LEAUGE-V4" : 'https://euw1.api.riotgames.com',
+    'SUMMONER-V4': 'https://euw1.api.riotgames.com',
+    'MATCH-V5': 'https://europe.api.riotgames.com'
+}
 
 DTYPE_PLAYER = {
     "winRate": float,
