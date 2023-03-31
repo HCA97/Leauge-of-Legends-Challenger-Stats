@@ -3,14 +3,14 @@ terraform {
   backend "local" {}
   required_providers {
     google = {
-      source  = "hashicorp/google"
+      source = "hashicorp/google"
     }
   }
 }
 
 provider "google" {
-    project = var.project
-    region = var.region
+  project = var.project
+  region  = var.region
 }
 
 
@@ -19,70 +19,84 @@ provider "google" {
 #
 
 resource "google_project_service" "project" {
-    for_each = toset([
-        "compute.googleapis.com",
-        "iamcredentials.googleapis.com"
-    ])
-    project = var.project
-    service = each.key
+  for_each = toset([
+    "compute.googleapis.com",
+    "iamcredentials.googleapis.com"
+  ])
+  project = var.project
+  service = each.key
 }
 
+
 resource "google_project_iam_member" "permissions" {
-    for_each = toset([
-        "roles/bigquery.admin",
-        "roles/storage.admin"
-    ])
-    project = var.project
-    role    = each.key
-    member  = "serviceAccount:${google_service_account.compute_engine_sa.email}"
+  for_each = toset([
+    "roles/bigquery.admin",
+    "roles/storage.admin"
+  ])
+  project = var.project
+  role    = each.key
+  member  = "serviceAccount:${google_service_account.compute_engine_sa.email}"
 }
 
 resource "google_service_account" "compute_engine_sa" {
-    project = var.project
-    account_id   = "compute-engine-sa"
-    display_name = "Service Account for Compute Engine"
+  project      = var.project
+  account_id   = "compute-engine-sa"
+  display_name = "Service Account for Compute Engine"
 
-    depends_on = [
-      google_project_service.project
-    ]
+  depends_on = [
+    google_project_service.project
+  ]
+}
+
+
+data "template_file" "setup" {
+  template = file("install.sh")
+  vars = {
+    prefect_key          = "${var.prefect_key}"
+    prefect_account_id   = "${var.prefect_account_id}"
+    prefect_workspace_id = "${var.prefect_workspace_id}"
+  }
 }
 
 
 resource "google_compute_instance" "prefect" {
-    name         = "prefect"
-    machine_type = "e2-medium"
-    zone = "${var.region}-b"
-    deletion_protection = false
+  name                = "prefect"
+  machine_type        = "e2-medium"
+  zone                = "${var.region}-b"
+  deletion_protection = false
 
-    boot_disk {
-      initialize_params {
-        image = "ubuntu-os-cloud/ubuntu-1804-lts"
-        size = 30
-      }
+
+  metadata_startup_script = data.template_file.setup.rendered
+
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-1804-lts"
+      size  = 30
     }
+  }
 
-    network_interface {
-        network = "default"
-        access_config {
-          // Ephemeral public IP
-        }
-    } 
-
-    service_account {
-        email  = google_service_account.compute_engine_sa.email
-        scopes = ["cloud-platform"]
+  network_interface {
+    network = "default"
+    access_config {
+      // Ephemeral public IP
     }
+  }
 
-    depends_on = [
-        google_project_service.project
-    ]
+  service_account {
+    email  = google_service_account.compute_engine_sa.email
+    scopes = ["cloud-platform"]
+  }
+
+  depends_on = [
+    google_project_service.project
+  ]
 }
 
 resource "google_storage_bucket" "data-lake-bucket" {
-  name          = "de-zoomcamp-project-data-lake-1234"
-  location      = var.region
+  name     = "de-zoomcamp-project-data-lake-1234"
+  location = var.region
 
-  storage_class = "STANDARD"
+  storage_class               = "STANDARD"
   uniform_bucket_level_access = true
 
   lifecycle_rule {
@@ -90,7 +104,7 @@ resource "google_storage_bucket" "data-lake-bucket" {
       type = "Delete"
     }
     condition {
-      age = 100  // days
+      age = 100 // days
     }
   }
 
@@ -98,14 +112,14 @@ resource "google_storage_bucket" "data-lake-bucket" {
 }
 
 resource "google_storage_bucket" "prefect-bucket" {
-  name          = "de-zoomcamp-project-prefect-code-1234"
-  location      = var.region
+  name     = "de-zoomcamp-project-prefect-code-1234"
+  location = var.region
 
-  storage_class = "STANDARD"
+  storage_class               = "STANDARD"
   uniform_bucket_level_access = true
 
   versioning {
-    enabled     = true
+    enabled = true
   }
 
   force_destroy = true
