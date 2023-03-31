@@ -10,14 +10,15 @@ conda install python=3.8 -y
 pip install \
     requests \
     pandas==1.5.2 \
-    prefect==2.7.7 \
-    prefect-sqlalchemy==0.2.2 \
+    prefect==2.9.0 \
     prefect-gcp[cloud_storage]==0.2.4 \
     protobuf==4.21.11 \
     pyarrow==10.0.1 \
     pandas-gbq==0.18.1 \
     google-cloud-storage \
+    fsspec \
     gcsfs
+
 export PREFECT_API_KEY="${prefect_key}"
 export PREFECT_API_URL="https://api.prefect.cloud/api/accounts/${prefect_account_id}/workspaces/${prefect_workspace_id}"
 export PREFECT_PROFILE="default"
