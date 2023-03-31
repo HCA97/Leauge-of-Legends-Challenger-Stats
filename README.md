@@ -6,67 +6,46 @@ final project for de-zoomcamp
 
 ## Leauge of Legends API
 
-Create a leauge of legends account. (https://developer.riotgames.com/)
+1. Create a leauge of legends account. (https://developer.riotgames.com/)
+2. Use development `DEVELOPMENT API KEY`, it will reset everyday so you need to renew it.
 
-Use development `DEVELOPMENT API KEY`, it will reset everyday so you need to renew it.
-
-## Cloud
-
-Use terraform to build needed infrastructure. (storage, bigquery, compute engine and a service account)
-
-Setup the compute engine. 
-
-```bash
-wget https://repo.anaconda.com/archive/Anaconda3-2023.03-Linux-x86_64.sh
-chmod +x Anaconda3-2023.03-Linux-x86_64.sh
-./Anaconda3-2023.03-Linux-x86_64.sh # set conda init [yes]
-source .bashrc
-conda create --name prefect python=3.8
-conda activate prefect
-pip install \
-    requests \
-    pandas==1.5.2 \
-    prefect==2.7.7 \
-    prefect-sqlalchemy==0.2.2 \
-    prefect-gcp[cloud_storage]==0.2.4 \
-    protobuf==4.21.11 \
-    pyarrow==10.0.1 \
-    pandas-gbq==0.18.1 \
-    google-cloud-storage \
-    gcsfs
-export PREFECT_API_KEY="$PREFECT_API_KEY"
-export PREFECT_API_URL="https://api.prefect.cloud/api/accounts/$ACCOUNT_ID/workspaces/$WORKSPACE_ID"
-export PREFECT_PROFILE="default"
-prefect agent start -q 'project'
-```
 
 ## Prefect
 
-prefect deployment build main_track_player.py:process -n test -q test -sb gcs/test -a
+1. Create a `Prefect Cloud Account` [[link](https://www.prefect.io/cloud/)]
+2. Create a `Prefect Workspace` 
+3. Jump to the `Cloud Step`
+4. Download the service account that is created by terraform.
+5. Create `Prefect Blocks`
+    ```bash
+    cd prefect
+    pip install -r requiremetns.txt
+    prefect cloud login
+    python blocks.py --sa_path="$SA_PATH" --riot_api_key="$RIOT_API_KEY"
+    python deployment.py
+    ```
+6. Do a Test Run
 
-Create a prefect cloud account
+## Cloud
 
-Setup workspace.
+1. Create Google Cloud Account
 
-```bash
-git clone https://github.com/HCA97/de-zoomcamp-project.git
-cd de-zoomcamp-project/prefect
-pip install -r requiremetns.txt
-```
+2. Install `Terraform` [[link](https://developer.hashicorp.com/terraform/downloads)] and `gcloud-cli` [[link](https://cloud.google.com/sdk/docs/install)]
 
-Login prefect
-```bash
-prefect cloud login
-```
+4. Create a `GCP Project` 
 
-Create Blocks
-```bash
-cd prefect
-python blocks.py --sa_path="$SA_PATH" --riot_api_key="$RIOT_API_KEY"
-```
+    **Note:** *You mush have owner permissions in the project to able to run terraform.*
 
-Setup blocks we need.
-```bash
-python deployment.py
-```
+3. Build the infra.
+    ```bash
+    cd terraform
+    terraform init
+    terraform apply \
+        -var="project=$PROJECT_ID" \
+        -var="prefect_key=$PREFECT_API_KEY" \
+        -var="prefect_account_id=$PREFECT_ACCOUNT_ID" \
+        -var="prefect_workspace_id=$PREFECT_WORKSPACE_ID" \
+        --auto-approve
+    ```
+
 ## DBT
