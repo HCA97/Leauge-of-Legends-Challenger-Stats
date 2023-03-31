@@ -83,7 +83,17 @@ def get_summoner_ids(summoner_name: str, summoner_id: str) -> str:
 #
 
 
-def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100, match_type: str = 'ranked') -> list:
+def match_history(summoner_puuid: str, 
+                  start_time: dt.datetime, 
+                  end_time: dt.datetime, 
+                  count: int = 100, 
+                  match_type: str = 'ranked') -> list:
+    
+    file_name = f'match-history/{summoner_puuid}-{match_type}-{start_time.strftime("%m-%d-%Y_%H:%M:%S")}-{end_time.strftime("%m-%d-%Y_%H:%M:%S")}.json'
+
+    if blob_exists(cfg.DATA_LAKE, file_name, cfg.CREDENTIALS):
+        return download_blob_to_memory(cfg.DATA_LAKE, file_name, cfg.CREDENTIALS)
+    
     match_ids = []
     start = 0
 
@@ -91,6 +101,7 @@ def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100
         with cfg.SESSION.get(f'{cfg.REQUEST_URLS["MATCH-V5"]}/lol/match/v5/matches/by-puuid/{summoner_puuid}/ids',
                         params={
                             'startTime': int(start_time.timestamp()),
+                            'endTime': int(end_time.timestamp()),
                             'type': match_type,
                             'count': count,
                             'start': start
@@ -111,6 +122,9 @@ def match_history(summoner_puuid: str, start_time: dt.datetime, count: int = 100
                 break            
 
     print(f'In total matches played is {len(match_ids)}.')
+
+    upload_blob_from_memory(cfg.DATA_LAKE, json.dumps(match_ids), file_name, cfg.CREDENTIALS)
+
     return match_ids
 
 

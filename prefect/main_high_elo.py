@@ -90,20 +90,20 @@ def upload_to_bq(data: pd.DataFrame,
 
 
 @task(name="Match-History", log_prints=True)
-def players_match_history(players, start_time):
+def players_match_history(players: list, start_time: dt.datetime, end_time: dt.datetime) -> list:
 
     match_histories = []
     for i, summoner_puuid in enumerate(players):
 
         if i % 10 == 0:
             print(f'{i}/{len(players)} are done.')
-        matches = utils.match_history(summoner_puuid, start_time)
+        matches = utils.match_history(summoner_puuid, start_time, end_time)
         match_histories.extend(matches)
 
     return list(set(match_histories))
 
 @task(name='Match-Infos', log_prints=True)
-def match_infos(match_ids):
+def match_infos(match_ids: list) -> pd.DataFrame:
 
     participants = []
     
@@ -145,11 +145,11 @@ def process_players(leauge: str, queue: str) -> list:
     return players['summonerPuuid'].tolist()
 
 @flow(name='Process-Matches', log_prints=True)
-def process_matches(puuids: list, start_time: dt.datetime) -> None:
+def process_matches(puuids: list, start_time: dt.datetime, end_time: dt.datetime) -> None:
     '''gets match history of given players and start time.'''
     
     # get match ids
-    match_ids = players_match_history(puuids, start_time)
+    match_ids = players_match_history(puuids, start_time, end_time)
     print(f'Total games are {len(match_ids)}.')
 
     # get match infos
@@ -165,7 +165,10 @@ def process_matches(puuids: list, start_time: dt.datetime) -> None:
                 ])
 
 @flow(name='Process-Data', log_prints=True)
-def process_data(leauge: str, queue: str, start_time: Optional[dt.datetime]) -> None:
+def process_data(leauge: str, 
+                 queue: str, 
+                 start_time: Optional[dt.datetime],
+                 end_time: Optional[dt.datetime]) -> None:
     '''get the high elo players and their games.'''
 
     # get high elo players players
@@ -175,7 +178,11 @@ def process_data(leauge: str, queue: str, start_time: Optional[dt.datetime]) -> 
     if start_time is None: 
         # get yesterdays data if start_time is none
         start_time = dt.datetime.utcnow() - dt.timedelta(1)
-    process_matches(puuids, start_time)
+
+    if end_time is None:
+        end_time = dt.datetime.utcnow()
+
+    process_matches(puuids, start_time, end_time)
 
 
 if __name__ == '__main__':
