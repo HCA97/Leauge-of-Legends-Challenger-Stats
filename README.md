@@ -4,9 +4,13 @@ For my final project in the [de-zoomcamp course](https://github.com/DataTalksClu
 
 After analyzing the data, I found that the worst games are played early in the morning, between 00:00 and 08:00 AM. However, since I have only collected data on 8.4k games so far, this conclusion is not yet certain. I plan to continue collecting data over the next few days to see if this trend holds up. Even though the results are still preliminary, they suggest that players should avoid playing League of Legends in the early morning hours if they want to have better games.
 
-# Setup
+## Architecture
 
-## Leauge of Legends API
+![architecture](./images/architecture.png)
+
+## Setup
+
+### Leauge of Legends API
 
 1. Create a leauge of legends account. (https://developer.riotgames.com/)
 
@@ -16,7 +20,7 @@ After analyzing the data, I found that the worst games are played early in the m
 
 
 
-## Prefect
+### Prefect
 
 1. Create a `Prefect Cloud Account` [[link](https://www.prefect.io/cloud/)]
 
@@ -37,7 +41,7 @@ After analyzing the data, I found that the worst games are played early in the m
 
 6. Do a Test Run
 
-## Cloud
+### Cloud
 
 1. Create Google Cloud Account
 
@@ -59,7 +63,7 @@ After analyzing the data, I found that the worst games are played early in the m
         --auto-approve
     ```
 
-## DBT
+### DBT
 
 1. Setup a `dbt cloud` account.
 
