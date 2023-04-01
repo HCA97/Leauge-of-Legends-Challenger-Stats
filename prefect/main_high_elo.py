@@ -167,8 +167,8 @@ def process_matches(puuids: list, start_time: dt.datetime, end_time: dt.datetime
 @flow(name='Process-Data', log_prints=True)
 def process_data(leauge: str, 
                  queue: str, 
-                 start_time: Optional[dt.datetime],
-                 end_time: Optional[dt.datetime]) -> None:
+                 start_time: Optional[dt.datetime] = None,
+                 end_time: Optional[dt.datetime] = None) -> None:
     '''get the high elo players and their games.'''
 
     # get high elo players players
