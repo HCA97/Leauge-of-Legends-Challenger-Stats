@@ -7,15 +7,20 @@ final project for de-zoomcamp
 ## Leauge of Legends API
 
 1. Create a leauge of legends account. (https://developer.riotgames.com/)
+
 2. Use development `DEVELOPMENT API KEY`, it will reset everyday so you need to renew it.
 
 
 ## Prefect
 
 1. Create a `Prefect Cloud Account` [[link](https://www.prefect.io/cloud/)]
+
 2. Create a `Prefect Workspace` 
+
 3. Jump to the `Cloud Step`
+
 4. Download the service account that is created by terraform.
+
 5. Create `Prefect Blocks`
     ```bash
     cd prefect
@@ -24,6 +29,7 @@ final project for de-zoomcamp
     python blocks.py --sa_path="$SA_PATH" --riot_api_key="$RIOT_API_KEY"
     python deployment.py
     ```
+
 6. Do a Test Run
 
 ## Cloud
@@ -49,3 +55,11 @@ final project for de-zoomcamp
     ```
 
 ## DBT
+
+1. Setup a `dbt cloud` account.
+
+1. Follow instructions to `setup bigquery connection` [[link](https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/week_4_analytics_engineering/dbt_cloud_setup.md)]
+
+2. Connect github repo to dbt cloud and specify the subdirectory as `dbt`.
+
+3. Run `dbt build` on `dbt cloud`.
