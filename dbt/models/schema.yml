@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: warehouse
+    database: de-zoomcamp-project-381912
+
+    schema: datawarehouse
+    
+    tables:
+      - name: matches
+      - name: players
+
+models:
+    - name: players
+      description: "Lasest Players"
+
+    - name: matches
+      description: "Ranked Games"
+    
+    - name: game_statistics
+      description: "Game statistics based on hour"
