@@ -1,6 +1,8 @@
-# de-zoomcamp-project
-final project for de-zoomcamp
+# Leauge of Legends Challenger Stats
 
+For my final project in the [de-zoomcamp course](https://github.com/DataTalksClub/data-engineering-zoomcamp), I built a data pipeline that continuously fetches data from the League of Legends API. Every day, I ingest the previous day's matches, aggregate the data, and display it on a Google dashboard. To gather data, I collected the match histories of the top 0.01% of players (Challenger) games'. By analyzing their match histories, I aimed to identify the best times to play League of Legends.
+
+After analyzing the data, I found that the worst games are played early in the morning, between 00:00 and 08:00 AM. However, since I have only collected data on 8.4k games so far, this conclusion is not yet certain. I plan to continue collecting data over the next few days to see if this trend holds up. Even though the results are still preliminary, they suggest that players should avoid playing League of Legends in the early morning hours if they want to have better games.
 
 # Setup
 
@@ -8,7 +10,10 @@ final project for de-zoomcamp
 
 1. Create a leauge of legends account. (https://developer.riotgames.com/)
 
-2. Use development `DEVELOPMENT API KEY`, it will reset everyday so you need to renew it.
+2. Use development `DEVELOPMENT API KEY` to call the API.
+    
+    **Note:** *The API key will reset everyday so you need to renew it. If you don't want to renew it everyday then you need to apply for personal API key which takes 10 bussiness days to get it.*
+
 
 
 ## Prefect
@@ -60,6 +65,6 @@ final project for de-zoomcamp
 
 1. Follow instructions to `setup bigquery connection` [[link](https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/week_4_analytics_engineering/dbt_cloud_setup.md)]
 
-2. Connect github repo to dbt cloud and specify the subdirectory as `dbt`.
+2. Connect this github repo to dbt cloud and specify the subdirectory as `dbt`.
 
-3. Run `dbt build` on `dbt cloud`.
+3. Run `dbt build` 
